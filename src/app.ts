@@ -1,23 +1,43 @@
-import express, { Application } from 'express';
-import dotenv from 'dotenv';
-import healthRoutes from './routes/health.routes';
-import { errorHandler } from './middleware/errorHandler';
+import 'dotenv/config';
+import express, { type NextFunction, type Request, type Response } from 'express';
+import reservationRouter from './routes/reservation.routes';
+import type { ErrorResponse } from './types/reservation';
 
-dotenv.config();
+const app = express();
 
-const app: Application = express();
-const PORT: number = Number(process.env.PORT) || 3000;
+app.use(express.json()); // Parses incoming JSON request bodies
 
-app.use(express.json());
+// Mount the router under the base path defined in docs/openapi.yaml (servers[0].url)
+app.use('/api/v1', reservationRouter);
 
-// Versioned API namespace -> mounts GET /api/v1/health
-app.use('/api/v1', healthRoutes);
+// Any route not in the contract -> 404 ErrorResponse
+app.use((req: Request, res: Response) => {
+  const body: ErrorResponse = {
+    code: 'NOT_FOUND',
+    message: `Route ${req.method} ${req.originalUrl} is not defined in the API contract.`,
+  };
+  res.status(404).json(body);
+});
 
-// Error-handling middleware must be registered last
-app.use(errorHandler);
+const isJsonParseError = (err: unknown): boolean =>
+  typeof err === 'object' && err !== null && (err as { type?: unknown }).type === 'entity.parse.failed';
 
-app.listen(PORT, (): void => {
-  console.log(`Server running on http://localhost:${PORT}`);
+// Global error handler (4 arguments are required for Express to treat it as one)
+app.use((err: unknown, _req: Request, res: Response, _next: NextFunction) => {
+  if (isJsonParseError(err)) {
+    const body: ErrorResponse = { code: 'INVALID_JSON', message: 'Request body is not valid JSON.' };
+    res.status(400).json(body);
+    return;
+  }
+  console.error(err);
+  const body: ErrorResponse = { code: 'INTERNAL_ERROR', message: 'An unexpected error occurred.' };
+  res.status(500).json(body);
+});
+
+const PORT = Number(process.env.PORT) || 3000;
+
+app.listen(PORT, () => {
+  console.log(`Server is running on http://localhost:${PORT}`);
 });
 
 export default app;
