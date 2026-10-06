@@ -1,43 +1,52 @@
-import 'dotenv/config';
-import express, { type NextFunction, type Request, type Response } from 'express';
-import reservationRouter from './routes/reservation.routes';
-import type { ErrorResponse } from './types/reservation';
+import express, { type Express } from 'express';
+import { config } from './config';
+import { connectDatabase, disconnectDatabase } from './config/database';
+import { errorHandler, notFoundHandler } from './middleware/errorHandler';
+import apiRouter from './routes';
 
-const app = express();
+/** Builds the Express app without starting it (handy for tests). */
+export function createApp(): Express {
+  const app = express();
 
-app.use(express.json()); // Parses incoming JSON request bodies
+  app.use(express.json());
 
-// Mount the router under the base path defined in docs/openapi.yaml (servers[0].url)
-app.use('/api/v1', reservationRouter);
+  // Base path matches the OpenAPI server URL: http://localhost:3000/api/v1
+  app.use(config.apiPrefix || '/', apiRouter);
 
-// Any route not in the contract -> 404 ErrorResponse
-app.use((req: Request, res: Response) => {
-  const body: ErrorResponse = {
-    code: 'NOT_FOUND',
-    message: `Route ${req.method} ${req.originalUrl} is not defined in the API contract.`,
+  app.use(notFoundHandler);
+  app.use(errorHandler);
+
+  return app;
+}
+
+async function start(): Promise<void> {
+  await connectDatabase(config.mongoUri);
+
+  const app = createApp();
+  const server = app.listen(config.port, () => {
+    console.log(
+      `[app] CampusHub API (${config.nodeEnv}) listening on http://localhost:${config.port}${config.apiPrefix}`,
+    );
+  });
+
+  const shutdown = async (signal: string): Promise<void> => {
+    console.log(`[app] ${signal} received, shutting down...`);
+    server.close();
+    await disconnectDatabase();
+    process.exit(0);
   };
-  res.status(404).json(body);
-});
 
-const isJsonParseError = (err: unknown): boolean =>
-  typeof err === 'object' && err !== null && (err as { type?: unknown }).type === 'entity.parse.failed';
+  process.on('SIGINT', () => {
+    void shutdown('SIGINT');
+  });
+  process.on('SIGTERM', () => {
+    void shutdown('SIGTERM');
+  });
+}
 
-// Global error handler (4 arguments are required for Express to treat it as one)
-app.use((err: unknown, _req: Request, res: Response, _next: NextFunction) => {
-  if (isJsonParseError(err)) {
-    const body: ErrorResponse = { code: 'INVALID_JSON', message: 'Request body is not valid JSON.' };
-    res.status(400).json(body);
-    return;
-  }
-  console.error(err);
-  const body: ErrorResponse = { code: 'INTERNAL_ERROR', message: 'An unexpected error occurred.' };
-  res.status(500).json(body);
-});
-
-const PORT = Number(process.env.PORT) || 3000;
-
-app.listen(PORT, () => {
-  console.log(`Server is running on http://localhost:${PORT}`);
-});
-
-export default app;
+if (require.main === module) {
+  start().catch((err: unknown) => {
+    console.error('[app] Failed to start server:', err);
+    process.exit(1);
+  });
+}

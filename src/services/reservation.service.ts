@@ -1,73 +1,89 @@
-/**
- * Minimal in-memory service layer for local testing (no database required).
- * Data resets every time the server restarts.
- */
-import { randomUUID } from 'node:crypto';
+import { ACTIVE_RESERVATION_STATUSES } from '../constants/enums';
 import {
-  ACTIVE_RESERVATION_STATUSES,
-  type CreateReservationRequest,
-  type ErrorCode,
-  type Reservation,
-  type Resource,
-} from '../types/reservation';
+  DoubleBookingError,
+  ResourceNotFoundError,
+  ResourceUnavailableError,
+  ValidationError,
+} from '../errors/domain.errors';
+import { Reservation, type ReservationDocument } from '../models/Reservation.model';
+import { Resource } from '../models/Resource.model';
+import type { CreateReservationInput, ReservationDTO } from '../types/reservation.types';
+import { isObjectIdString, translatePersistenceError } from './service.utils';
 
-const resources: Resource[] = [
-  { id: 'res-101', name: 'Study Room 302', type: 'ROOM', location: 'Library, Floor 3', isAvailable: true },
-  { id: 'res-102', name: '3D Printer A', type: 'EQUIPMENT', location: 'Makerspace, Room 110', isAvailable: true },
-  { id: 'res-103', name: 'Robotics Lab', type: 'LAB', location: 'Engineering Building, Room 204', isAvailable: true },
-  { id: 'res-104', name: 'Study Room 305', type: 'ROOM', location: 'Library, Floor 3', isAvailable: false },
-];
+/**
+ * Reservation business logic + persistence.
+ * No Express imports, no req/res, no HTTP status codes.
+ */
 
-const reservations: Reservation[] = [];
-
-export function listResources(type?: string): Resource[] {
-  return type === undefined ? [...resources] : resources.filter((r) => r.type === type);
+function toReservationDTO(doc: ReservationDocument): ReservationDTO {
+  return {
+    id: doc._id.toString(),
+    resourceId: doc.resourceId.toString(),
+    userId: doc.userId,
+    startTime: doc.startTime.toISOString(),
+    endTime: doc.endTime.toISOString(),
+    status: doc.status,
+  };
 }
 
-export function listActiveReservationsForUser(userId: string): Reservation[] {
-  return reservations
-    .filter((r) => r.userId === userId && ACTIVE_RESERVATION_STATUSES.includes(r.status))
-    .sort((a, b) => Date.parse(a.startTime) - Date.parse(b.startTime));
-}
+/**
+ * Business rules:
+ *  1. endTime must be later than startTime                    -> VALIDATION_ERROR
+ *  2. the resource must exist                                 -> RESOURCE_NOT_FOUND
+ *     (a resourceId that is not a valid ObjectId cannot exist, so it is also "not found")
+ *  3. the resource must be available                          -> RESOURCE_UNAVAILABLE
+ *  4. no overlapping PENDING/CONFIRMED booking on resource    -> DOUBLE_BOOKING
+ * New reservations always start as PENDING.
+ */
+export async function createReservation(input: CreateReservationInput): Promise<ReservationDTO> {
+  if (input.endTime.getTime() <= input.startTime.getTime()) {
+    throw new ValidationError('endTime must be later than startTime.');
+  }
 
-export type CreateReservationResult =
-  | { ok: true; reservation: Reservation }
-  | { ok: false; code: Extract<ErrorCode, 'RESOURCE_NOT_FOUND' | 'RESOURCE_UNAVAILABLE' | 'DOUBLE_BOOKING'>; message: string };
+  const notFoundMessage = `Resource ${input.resourceId} does not exist.`;
+  if (!isObjectIdString(input.resourceId)) {
+    throw new ResourceNotFoundError(notFoundMessage);
+  }
 
-/** Two blocks overlap when each starts before the other ends. Back-to-back slots (10–11, 11–12) do not overlap. */
-const overlaps = (aStart: number, aEnd: number, bStart: number, bEnd: number): boolean =>
-  aStart < bEnd && bStart < aEnd;
-
-export function createReservation(input: CreateReservationRequest): CreateReservationResult {
-  const resource = resources.find((r) => r.id === input.resourceId);
+  const resource = await Resource.findById(input.resourceId);
   if (!resource) {
-    return { ok: false, code: 'RESOURCE_NOT_FOUND', message: `Resource ${input.resourceId} does not exist.` };
+    throw new ResourceNotFoundError(notFoundMessage);
   }
   if (!resource.isAvailable) {
-    return { ok: false, code: 'RESOURCE_UNAVAILABLE', message: `Resource ${input.resourceId} is not available for reservation.` };
+    throw new ResourceUnavailableError(`Resource ${input.resourceId} is not available.`);
   }
 
-  // Compare as epoch ms so different timezone offsets are handled correctly.
-  const start = Date.parse(input.startTime);
-  const end = Date.parse(input.endTime);
-  const conflict = reservations.some(
-    (r) =>
-      r.resourceId === input.resourceId &&
-      ACTIVE_RESERVATION_STATUSES.includes(r.status) &&
-      overlaps(start, end, Date.parse(r.startTime), Date.parse(r.endTime)),
-  );
-  if (conflict) {
-    return { ok: false, code: 'DOUBLE_BOOKING', message: 'Resource is already reserved for this time slot.' };
+  // Two windows overlap when each one starts before the other ends
+  // (back-to-back bookings, where one ends exactly as the next starts, are allowed).
+  const overlapping = await Reservation.exists({
+    resourceId: resource._id,
+    status: { $in: [...ACTIVE_RESERVATION_STATUSES] },
+    startTime: { $lt: input.endTime },
+    endTime: { $gt: input.startTime },
+  });
+  if (overlapping) {
+    throw new DoubleBookingError('Resource is already reserved for this time slot.');
   }
 
-  const reservation: Reservation = {
-    id: `rsv-${randomUUID()}`,
-    resourceId: input.resourceId,
-    userId: input.userId,
-    startTime: input.startTime,
-    endTime: input.endTime,
-    status: 'PENDING',
-  };
-  reservations.push(reservation);
-  return { ok: true, reservation };
+  try {
+    const doc = await Reservation.create({
+      resourceId: resource._id,
+      userId: input.userId,
+      startTime: input.startTime,
+      endTime: input.endTime,
+      status: 'PENDING',
+    });
+    return toReservationDTO(doc);
+  } catch (err) {
+    return translatePersistenceError(err);
+  }
+}
+
+/** A user's active (PENDING or CONFIRMED) reservations, sorted by startTime. */
+export async function getActiveReservationsForUser(userId: string): Promise<ReservationDTO[]> {
+  const docs = await Reservation.find({
+    userId,
+    status: { $in: [...ACTIVE_RESERVATION_STATUSES] },
+  }).sort({ startTime: 1, _id: 1 });
+  return docs.map(toReservationDTO);
 }

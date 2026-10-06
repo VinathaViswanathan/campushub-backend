@@ -1,14 +1,17 @@
 {
   "name": "campushub-backend",
   "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
+  "description": "CS5500 CampusHub backend: TypeScript + Express + Mongoose with strict 3-tier architecture",
+  "main": "dist/app.js",
   "scripts": {
     "dev": "tsx watch src/app.ts",
     "build": "tsc",
     "start": "node dist/app.js",
+    "typecheck": "tsc --noEmit",
+    "seed": "tsx src/scripts/seed.ts",
     "lint": "eslint . --ext .ts",
-    "format": "prettier --write \"src/**/*.ts\""
+    "format": "prettier --write \"src/**/*.ts\"",
+    "test:smoke": "bash scripts/smoke-test.sh"
   },
   "keywords": [],
   "author": "",

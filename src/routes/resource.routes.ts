@@ -1,10 +1,9 @@
 import { Router } from 'express';
-import { createReservation, getUserReservations } from '../controllers/reservation.controller';
+import { listResources } from '../controllers/resource.controller';
 
 /** Routes only map HTTP verbs + paths to controller methods (paths from docs/openapi.yaml). */
 const router: Router = Router();
 
-router.post('/', createReservation);
-router.get('/user/:userId', getUserReservations);
+router.get('/', listResources);
 
 export default router;
