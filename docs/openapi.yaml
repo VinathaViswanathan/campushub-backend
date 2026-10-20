@@ -29,7 +29,9 @@ paths:
       tags: [Resources]
       operationId: listResources
       summary: List all resources
-      description: Returns every campus resource, optionally filtered by resource type.
+      description: >-
+        Returns every campus resource, optionally filtered by resource type and/or
+        availability. When both filters are provided they are combined (AND).
       parameters:
         - name: type
           in: query
@@ -41,6 +43,15 @@ paths:
             type: string
             minLength: 1
             example: ROOM
+        - name: isAvailable
+          in: query
+          required: false
+          description: >-
+            Filter resources by availability. When provided it must be exactly
+            `true` or `false`; any other value returns 400.
+          schema:
+            type: boolean
+            example: true
       responses:
         '200':
           description: A list of resources.
@@ -136,7 +147,79 @@ paths:
         '500':
           $ref: '#/components/responses/InternalError'
 
+  /reservations/{id}/cancel:
+    patch:
+      tags: [Reservations]
+      operationId: cancelReservation
+      summary: Cancel a reservation
+      description: >-
+        Transitions a reservation to CANCELLED. A CANCELLED reservation no longer
+        blocks its time slot, so the slot can be booked again immediately.
+        Cancelling a reservation that is already CANCELLED is a no-op and returns 200.
+        No request body is required.
+      parameters:
+        - $ref: '#/components/parameters/ReservationId'
+      responses:
+        '200':
+          description: The reservation, now CANCELLED.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Reservation'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/ReservationNotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /reservations/{id}/confirm:
+    patch:
+      tags: [Reservations]
+      operationId: confirmReservation
+      summary: Confirm a reservation
+      description: >-
+        Transitions a PENDING reservation to CONFIRMED. Confirming a reservation that
+        is already CONFIRMED is a no-op and returns 200. A CANCELLED reservation cannot
+        be confirmed (409), because its time slot may already have been booked again.
+        No request body is required.
+      parameters:
+        - $ref: '#/components/parameters/ReservationId'
+      responses:
+        '200':
+          description: The reservation, now CONFIRMED.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Reservation'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/ReservationNotFound'
+        '409':
+          description: The reservation is CANCELLED and cannot be confirmed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                code: INVALID_STATUS_TRANSITION
+                message: Reservation 665f1c2e9b1d4a0012345678 is CANCELLED and cannot be confirmed.
+        '500':
+          $ref: '#/components/responses/InternalError'
+
 components:
+  parameters:
+    ReservationId:
+      name: id
+      in: path
+      required: true
+      description: ID of the reservation.
+      schema:
+        type: string
+        minLength: 1
+        example: 665f1c2e9b1d4a0012345678
+
   schemas:
     User:
       type: object
@@ -239,6 +322,8 @@ components:
             - RESOURCE_NOT_FOUND
             - RESOURCE_UNAVAILABLE
             - DOUBLE_BOOKING
+            - RESERVATION_NOT_FOUND
+            - INVALID_STATUS_TRANSITION
             - NOT_FOUND
             - INTERNAL_ERROR
           example: VALIDATION_ERROR
@@ -257,6 +342,15 @@ components:
           example:
             code: VALIDATION_ERROR
             message: type must be a non-empty string when provided.
+    ReservationNotFound:
+      description: The reservation does not exist.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            code: RESERVATION_NOT_FOUND
+            message: Reservation 665f1c2e9b1d4a0012345678 does not exist.
     InternalError:
       description: Unexpected server error.
       content:

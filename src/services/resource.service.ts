@@ -1,5 +1,5 @@
 import { isResourceType } from '../constants/enums';
-import { Resource, type ResourceDocument } from '../models/Resource.model';
+import { Resource, type IResource, type ResourceDocument } from '../models/Resource.model';
 import type { ResourceDTO, ResourceFilter } from '../types/resource.types';
 
 /**
@@ -18,19 +18,23 @@ function toResourceDTO(doc: ResourceDocument): ResourceDTO {
 }
 
 /**
- * Lists resources, optionally filtered by exact type.
+ * Lists resources, optionally filtered by exact type and/or availability (combined with AND).
  * Per the contract, a type that matches nothing (e.g. "FOO") returns [] rather than an error.
  */
 export async function listResources(filter: ResourceFilter = {}): Promise<ResourceDTO[]> {
-  if (filter.type === undefined) {
-    const docs = await Resource.find({}).sort({ name: 1 });
-    return docs.map(toResourceDTO);
+  const query: Partial<Pick<IResource, 'type' | 'isAvailable'>> = {};
+
+  if (filter.type !== undefined) {
+    if (!isResourceType(filter.type)) {
+      return [];
+    }
+    query.type = filter.type;
   }
 
-  if (!isResourceType(filter.type)) {
-    return [];
+  if (filter.isAvailable !== undefined) {
+    query.isAvailable = filter.isAvailable;
   }
 
-  const docs = await Resource.find({ type: filter.type }).sort({ name: 1 });
+  const docs = await Resource.find(query).sort({ name: 1 });
   return docs.map(toResourceDTO);
 }

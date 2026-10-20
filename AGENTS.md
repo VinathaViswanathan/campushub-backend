@@ -30,15 +30,17 @@ Supporting folders:
 
 ## API contract (docs/openapi.yaml) — summary
 
-Base path: `/api/v1`. Only these three operations exist; do not add others:
+Base path: `/api/v1`. Only these operations exist; do not add others:
 
 | Method | Path | Success | Errors |
 |---|---|---|---|
-| GET | `/resources?type=` | 200 | 400, 500 |
+| GET | `/resources?type=&isAvailable=` | 200 | 400, 500 |
 | POST | `/reservations` | 201 | 400, 404, 409, 500 |
 | GET | `/reservations/user/{userId}` | 200 | 400, 500 |
+| PATCH | `/reservations/{id}/cancel` | 200 | 400, 404, 500 |
+| PATCH | `/reservations/{id}/confirm` | 200 | 400, 404, 409, 500 |
 
-- Error body is exactly `{ "code": string, "message": string }` with no extra fields. Codes: `VALIDATION_ERROR`, `INVALID_JSON`, `RESOURCE_NOT_FOUND`, `RESOURCE_UNAVAILABLE`, `DOUBLE_BOOKING`, `NOT_FOUND`, `INTERNAL_ERROR`.
+- Error body is exactly `{ "code": string, "message": string }` with no extra fields. Codes: `VALIDATION_ERROR`, `INVALID_JSON`, `RESOURCE_NOT_FOUND`, `RESOURCE_UNAVAILABLE`, `DOUBLE_BOOKING`, `RESERVATION_NOT_FOUND`, `INVALID_STATUS_TRANSITION`, `NOT_FOUND`, `INTERNAL_ERROR`.
 - Response objects use `additionalProperties: false`. Resource = `id, name, type, location, isAvailable`. Reservation = `id, resourceId, userId, startTime, endTime, status`. Never leak `_id`, `createdAt`, `updatedAt`.
 - POST /reservations rejects unknown fields and the readOnly fields `id` and `status` (400).
 
@@ -48,7 +50,7 @@ Base path: `/api/v1`. Only these three operations exist; do not add others:
 2. Services must not import `express`. They must not accept `req`/`res`/`next` and must not call `res.status()` or reference HTTP status codes.
 3. Services return plain DTOs (see `src/types/`), never Mongoose documents.
 4. Services signal failure by throwing domain errors from `src/errors/`. Only `src/controllers/controller.utils.ts` maps them to HTTP codes:
-   `VALIDATION_ERROR -> 400`, `RESOURCE_NOT_FOUND -> 404`, `RESOURCE_UNAVAILABLE -> 409`, `DOUBLE_BOOKING -> 409`, anything else -> `500 INTERNAL_ERROR`.
+   `VALIDATION_ERROR -> 400`, `RESOURCE_NOT_FOUND -> 404`, `RESERVATION_NOT_FOUND -> 404`, `RESOURCE_UNAVAILABLE -> 409`, `DOUBLE_BOOKING -> 409`, `INVALID_STATUS_TRANSITION -> 409`, anything else -> `500 INTERNAL_ERROR`.
 5. Mongoose-specific errors (`ValidationError`, `CastError`) are translated into domain errors inside the service layer (`service.utils.ts`).
 6. No `any`. Use `unknown` plus validation, or explicit interfaces.
 7. No hardcoded connection strings, ports, or secrets. Add new settings to `src/config/index.ts` and `.env-example`.
@@ -57,12 +59,17 @@ Base path: `/api/v1`. Only these three operations exist; do not add others:
 ## Domain rules
 
 - Resource `type` is one of `ROOM`, `EQUIPMENT`, `LAB`. `GET /resources?type=X` with an unknown X returns `[]`, not an error. An empty `type` returns 400.
+- `GET /resources?isAvailable=` accepts exactly `true` or `false`; anything else returns 400. It combines with `type` (AND).
 - Reservation `status` is one of `PENDING`, `CONFIRMED`, `CANCELLED`. New reservations always start as `PENDING`.
 - `startTime`/`endTime` must be RFC 3339 date-times with a timezone, and `endTime` must be later than `startTime` (400).
 - `resourceId` is stored as an ObjectId reference to Resource. A `resourceId` that does not exist, including one that is not a valid ObjectId (e.g. `res-999`), returns 404 `RESOURCE_NOT_FOUND`.
 - A resource with `isAvailable: false` cannot be reserved (409 `RESOURCE_UNAVAILABLE`).
 - A reservation cannot overlap an existing `PENDING` or `CONFIRMED` reservation for the same resource (409 `DOUBLE_BOOKING`). Back-to-back bookings are allowed.
 - `GET /reservations/user/{userId}` returns only `PENDING`/`CONFIRMED` reservations, sorted by `startTime`.
+- Overlap formula: an existing active reservation overlaps the request when `existing.startTime < new.endTime AND existing.endTime > new.startTime` (strict comparisons on `Date` values, never strings).
+- Status transitions: `PENDING -> CONFIRMED`, `PENDING|CONFIRMED -> CANCELLED`. Repeating a transition to the current status is a no-op (200). `CANCELLED -> CONFIRMED` is rejected (409 `INVALID_STATUS_TRANSITION`). A reservation `id` that does not exist, including a non-ObjectId, returns 404 `RESERVATION_NOT_FOUND`.
+- A `CANCELLED` reservation immediately frees its slot (the overlap check ignores it).
+- Status changes use a single atomic `findOneAndUpdate` with `returnDocument: 'after'` (`new: true` is deprecated in Mongoose 9).
 
 ## When changing behavior
 

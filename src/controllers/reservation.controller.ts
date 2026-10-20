@@ -1,6 +1,10 @@
 import type { Request, Response } from 'express';
 import * as reservationService from '../services/reservation.service';
-import { parseCreateReservation, parseUserIdParam } from '../validators/reservation.validator';
+import {
+  parseCreateReservation,
+  parseReservationIdParam,
+  parseUserIdParam,
+} from '../validators/reservation.validator';
 import { sendError } from './controller.utils';
 
 /**
@@ -29,6 +33,34 @@ export async function getUserReservations(
     const userId = parseUserIdParam(req.params);
     const reservations = await reservationService.getActiveReservationsForUser(userId);
     res.status(200).json(reservations);
+  } catch (err) {
+    sendError(res, err);
+  }
+}
+
+/** PATCH /reservations/{id}/cancel -> 200 | 400 | 404 | 500 */
+export async function cancelReservation(
+  req: Request<{ id: string }>,
+  res: Response,
+): Promise<void> {
+  try {
+    const id = parseReservationIdParam(req.params);
+    const cancelled = await reservationService.cancelReservation(id);
+    res.status(200).json(cancelled);
+  } catch (err) {
+    sendError(res, err);
+  }
+}
+
+/** PATCH /reservations/{id}/confirm -> 200 | 400 | 404 | 409 | 500 */
+export async function confirmReservation(
+  req: Request<{ id: string }>,
+  res: Response,
+): Promise<void> {
+  try {
+    const id = parseReservationIdParam(req.params);
+    const confirmed = await reservationService.confirmReservation(id);
+    res.status(200).json(confirmed);
   } catch (err) {
     sendError(res, err);
   }

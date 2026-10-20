@@ -1,6 +1,8 @@
 import { ACTIVE_RESERVATION_STATUSES } from '../constants/enums';
 import {
   DoubleBookingError,
+  InvalidStatusTransitionError,
+  ReservationNotFoundError,
   ResourceNotFoundError,
   ResourceUnavailableError,
   ValidationError,
@@ -86,4 +88,62 @@ export async function getActiveReservationsForUser(userId: string): Promise<Rese
     status: { $in: [...ACTIVE_RESERVATION_STATUSES] },
   }).sort({ startTime: 1, _id: 1 });
   return docs.map(toReservationDTO);
+}
+
+/**
+ * Transitions a reservation to CANCELLED.
+ *  - unknown id (including one that is not a valid ObjectId)  -> RESERVATION_NOT_FOUND
+ *  - already CANCELLED                                        -> no-op, returns it unchanged
+ * Because the overlap check in createReservation only looks at PENDING/CONFIRMED,
+ * a CANCELLED reservation frees its time slot immediately.
+ */
+export async function cancelReservation(id: string): Promise<ReservationDTO> {
+  const notFoundMessage = `Reservation ${id} does not exist.`;
+  if (!isObjectIdString(id)) {
+    throw new ReservationNotFoundError(notFoundMessage);
+  }
+
+  // Single atomic update: no read-then-write race with a concurrent confirm.
+  const doc = await Reservation.findOneAndUpdate(
+    { _id: id },
+    { $set: { status: 'CANCELLED' } },
+    { returnDocument: 'after' },
+  );
+  if (!doc) {
+    throw new ReservationNotFoundError(notFoundMessage);
+  }
+  return toReservationDTO(doc);
+}
+
+/**
+ * Transitions a reservation to CONFIRMED.
+ *  - unknown id (including one that is not a valid ObjectId)  -> RESERVATION_NOT_FOUND
+ *  - PENDING or already CONFIRMED                             -> CONFIRMED
+ *  - CANCELLED                                                -> INVALID_STATUS_TRANSITION
+ *    (its slot may already have been re-booked, so it cannot be revived)
+ */
+export async function confirmReservation(id: string): Promise<ReservationDTO> {
+  const notFoundMessage = `Reservation ${id} does not exist.`;
+  if (!isObjectIdString(id)) {
+    throw new ReservationNotFoundError(notFoundMessage);
+  }
+
+  // The status guard is part of the filter, so a reservation cancelled concurrently
+  // can never be flipped back to CONFIRMED.
+  const doc = await Reservation.findOneAndUpdate(
+    { _id: id, status: { $in: [...ACTIVE_RESERVATION_STATUSES] } },
+    { $set: { status: 'CONFIRMED' } },
+    { returnDocument: 'after' },
+  );
+  if (doc) {
+    return toReservationDTO(doc);
+  }
+
+  const exists = await Reservation.exists({ _id: id });
+  if (!exists) {
+    throw new ReservationNotFoundError(notFoundMessage);
+  }
+  throw new InvalidStatusTransitionError(
+    `Reservation ${id} is CANCELLED and cannot be confirmed.`,
+  );
 }

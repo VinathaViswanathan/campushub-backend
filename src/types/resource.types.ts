@@ -9,7 +9,11 @@ export interface ResourceDTO {
   isAvailable: boolean;
 }
 
-/** GET /resources query parameters. `type` may be an arbitrary non-empty string per the spec. */
+/**
+ * GET /resources query parameters. `type` may be an arbitrary non-empty string per the spec.
+ * `isAvailable` is already parsed from the "true"/"false" query string into a boolean.
+ */
 export interface ResourceFilter {
   type?: string;
+  isAvailable?: boolean;
 }

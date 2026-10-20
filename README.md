@@ -60,12 +60,16 @@ The API has no endpoint for creating resources, so `npm run seed` is how resourc
 | GET    | `/api/v1/resources?type=ROOM`        | 200     | 400, 500           |
 | POST   | `/api/v1/reservations`               | 201     | 400, 404, 409, 500 |
 | GET    | `/api/v1/reservations/user/{userId}` | 200     | 400, 500           |
+| PATCH  | `/api/v1/reservations/{id}/cancel`   | 200     | 400, 404, 500      |
+| PATCH  | `/api/v1/reservations/{id}/confirm`  | 200     | 400, 404, 409, 500 |
+
+`GET /resources` accepts `type` and `isAvailable` (`true`/`false`) query filters, combined with AND.
 
 Error body: `{ "code": "DOUBLE_BOOKING", "message": "Resource is already reserved for this time slot." }`
 
 ## Testing
 
-Automated contract check (17 scenarios from `docs/openapi.yaml`):
+Automated contract check (Lab 3 scenarios plus Lab 4 filter, cancel, and confirm scenarios from `docs/openapi.yaml`):
 
 ```bash
 npm run seed          # reset data first; the tests create reservations
@@ -91,4 +95,12 @@ curl -i -X POST $BASE/reservations -H "Content-Type: application/json" \
 # Same request again -> 409 DOUBLE_BOOKING
 
 curl -i $BASE/reservations/user/user-456    # 2 active reservations, sorted by startTime
+
+curl -i "$BASE/resources?isAvailable=false"            # only Chemistry Lab 2
+curl -i "$BASE/resources?type=LAB&isAvailable=true"    # only Robotics Lab
+
+RSV=<id returned by the POST above>
+curl -i -X PATCH $BASE/reservations/$RSV/confirm       # 200 CONFIRMED
+curl -i -X PATCH $BASE/reservations/$RSV/cancel        # 200 CANCELLED; the slot is free again
+curl -i -X PATCH $BASE/reservations/$RSV/confirm       # 409 INVALID_STATUS_TRANSITION
 ```

@@ -11,6 +11,8 @@ const HTTP_STATUS_BY_CODE: Record<DomainErrorCode, number> = {
   RESOURCE_NOT_FOUND: 404,
   RESOURCE_UNAVAILABLE: 409,
   DOUBLE_BOOKING: 409,
+  RESERVATION_NOT_FOUND: 404,
+  INVALID_STATUS_TRANSITION: 409,
 };
 
 export interface ErrorResponseBody {

@@ -44,3 +44,15 @@ export function parseUserIdParam(params: unknown): string {
   }
   return userId;
 }
+
+/** PATCH /reservations/{id}/cancel and /reservations/{id}/confirm path parameter. */
+export function parseReservationIdParam(params: unknown): string {
+  const src = asRecord(params, 'Path parameters');
+  const errors: string[] = [];
+  const id = readNonEmptyString(src, 'id', errors);
+
+  if (errors.length > 0 || id === undefined) {
+    return failValidation(errors);
+  }
+  return id;
+}

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# CampusHub Lab 3 regression test against docs/openapi.yaml.
+# CampusHub Lab 3 + Lab 4 regression test against docs/openapi.yaml.
 # Prereqs (in another terminal):  npm run seed && npm run dev
 # Run:                             npm run test:smoke
 # Re-run `npm run seed` before each run: the tests create reservations.
@@ -51,8 +51,9 @@ if [ "$STATUS" = "000" ]; then
 fi
 
 RID=$(js "(b.find(r => r.name === 'Robotics Lab') || {}).id")
+PROJ=$(js "(b.find(r => r.name === 'Projector #3') || {}).id")
 UNAVAIL=$(js "(b.find(r => r.name === 'Chemistry Lab 2') || {}).id")
-if [ -z "$RID" ] || [ -z "$UNAVAIL" ]; then
+if [ -z "$RID" ] || [ -z "$UNAVAIL" ] || [ -z "$PROJ" ]; then
   echo "Seed data missing. Run: npm run seed"
   exit 1
 fi
@@ -69,6 +70,16 @@ req GET "/resources?type=FOO"
 checkjs "3  ?type=FOO -> 200 []" 200 "Array.isArray(b) && b.length === 0"
 req GET "/resources?type="
 check "4  ?type= (empty) -> 400" 400 '"code":"VALIDATION_ERROR"'
+req GET "/resources?isAvailable=true"
+checkjs "L1 ?isAvailable=true -> 4 available" 200 "b.length === 4 && b.every(r => r.isAvailable === true)"
+req GET "/resources?isAvailable=false"
+checkjs "L2 ?isAvailable=false -> only Chemistry Lab 2" 200 \
+  "b.length === 1 && b[0].name === 'Chemistry Lab 2' && b[0].isAvailable === false"
+req GET "/resources?type=LAB&isAvailable=true"
+checkjs "L3 ?type=LAB&isAvailable=true -> only Robotics Lab" 200 \
+  "b.length === 1 && b[0].name === 'Robotics Lab'"
+req GET "/resources?isAvailable=yes"
+check "L4 ?isAvailable=yes -> 400" 400 '"code":"VALIDATION_ERROR"'
 
 echo "--- POST /reservations"
 req POST /reservations "{\"resourceId\":\"$RID\",$H,\"startTime\":\"2026-12-01T10:00:00Z\",\"endTime\":\"2026-12-01T11:00:00Z\"}"
@@ -103,6 +114,41 @@ checkjs "14 user-456 -> 2 active, sorted, cancelled excluded" 200 \
   "b.length === 2 && b[0].startTime < b[1].startTime && b.every(r => r.status !== 'CANCELLED')"
 req GET /reservations/user/nobody
 checkjs "15 unknown user -> 200 []" 200 "Array.isArray(b) && b.length === 0"
+
+echo "--- PATCH /reservations/{id}/cancel and /confirm (Lab 4)"
+U='"userId":"user-321"'
+SLOT='"startTime":"2026-12-05T10:00:00Z","endTime":"2026-12-05T11:00:00Z"'
+req POST /reservations "{\"resourceId\":\"$PROJ\",$U,$SLOT}"
+check "L5 book projector slot -> 201" 201 '"status":"PENDING"'
+FIRST=$(js "b.id")
+req POST /reservations "{\"resourceId\":\"$PROJ\",$U,$SLOT}"
+check "L6 same slot while PENDING -> 409" 409 '"code":"DOUBLE_BOOKING"'
+req PATCH "/reservations/$FIRST/cancel"
+checkjs "L7 cancel -> 200 CANCELLED, spec'd fields only" 200 \
+  "b.id === '$FIRST' && b.status === 'CANCELLED' && Object.keys(b).sort().join() === 'endTime,id,resourceId,startTime,status,userId'"
+req PATCH "/reservations/$FIRST/cancel"
+check "L8 cancel again -> 200 (idempotent)" 200 '"status":"CANCELLED"'
+req POST /reservations "{\"resourceId\":\"$PROJ\",$U,$SLOT}"
+check "L9 cancelled slot is free again -> 201" 201 '"status":"PENDING"'
+SECOND=$(js "b.id")
+req GET /reservations/user/user-321
+checkjs "L10 user list shows only the new active booking" 200 "b.length === 1 && b[0].id === '$SECOND'"
+req PATCH "/reservations/$SECOND/confirm"
+check "L11 confirm PENDING -> 200 CONFIRMED" 200 '"status":"CONFIRMED"'
+req PATCH "/reservations/$SECOND/confirm"
+check "L12 confirm again -> 200 (idempotent)" 200 '"status":"CONFIRMED"'
+req POST /reservations "{\"resourceId\":\"$PROJ\",$U,\"startTime\":\"2026-12-05T10:30:00Z\",\"endTime\":\"2026-12-05T11:30:00Z\"}"
+check "L13 overlap with CONFIRMED -> 409" 409 '"code":"DOUBLE_BOOKING"'
+req PATCH "/reservations/$FIRST/confirm"
+check "L14 confirm CANCELLED -> 409" 409 '"code":"INVALID_STATUS_TRANSITION"'
+req PATCH "/reservations/$SECOND/cancel"
+check "L15 cancel CONFIRMED -> 200 CANCELLED" 200 '"status":"CANCELLED"'
+req PATCH /reservations/rsv-999/cancel
+check "L16 cancel non-ObjectId id -> 404" 404 '"code":"RESERVATION_NOT_FOUND"'
+req PATCH /reservations/000000000000000000000000/cancel
+check "L17 cancel unknown id -> 404" 404 '"code":"RESERVATION_NOT_FOUND"'
+req PATCH /reservations/000000000000000000000000/confirm
+check "L18 confirm unknown id -> 404" 404 '"code":"RESERVATION_NOT_FOUND"'
 
 echo "--- Routes outside the contract"
 req GET /does-not-exist

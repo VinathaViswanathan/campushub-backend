@@ -8,7 +8,9 @@ export type DomainErrorCode =
   | 'VALIDATION_ERROR'
   | 'RESOURCE_NOT_FOUND'
   | 'RESOURCE_UNAVAILABLE'
-  | 'DOUBLE_BOOKING';
+  | 'DOUBLE_BOOKING'
+  | 'RESERVATION_NOT_FOUND'
+  | 'INVALID_STATUS_TRANSITION';
 
 export abstract class DomainError extends Error {
   abstract readonly code: DomainErrorCode;
@@ -33,4 +35,12 @@ export class ResourceUnavailableError extends DomainError {
 
 export class DoubleBookingError extends DomainError {
   readonly code = 'DOUBLE_BOOKING' as const;
+}
+
+export class ReservationNotFoundError extends DomainError {
+  readonly code = 'RESERVATION_NOT_FOUND' as const;
+}
+
+export class InvalidStatusTransitionError extends DomainError {
+  readonly code = 'INVALID_STATUS_TRANSITION' as const;
 }

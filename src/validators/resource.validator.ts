@@ -1,16 +1,38 @@
 import type { ResourceFilter } from '../types/resource.types';
 import { asRecord, failValidation } from './common';
 
-/** GET /resources?type=... : type is optional but must be a non-empty string when provided. */
+/**
+ * GET /resources?type=...&isAvailable=...
+ *  - type is optional but must be a non-empty string when provided.
+ *  - isAvailable is optional but must be exactly "true" or "false" when provided.
+ */
 export function parseResourceFilter(query: unknown): ResourceFilter {
   const src = asRecord(query, 'Query string');
-  const type = src['type'];
+  const errors: string[] = [];
+  const filter: ResourceFilter = {};
 
-  if (type === undefined) {
-    return {};
+  const type = src['type'];
+  if (type !== undefined) {
+    if (typeof type !== 'string' || type.trim() === '') {
+      errors.push('type must be a non-empty string when provided.');
+    } else {
+      filter.type = type;
+    }
   }
-  if (typeof type !== 'string' || type.trim() === '') {
-    return failValidation(['type must be a non-empty string when provided.']);
+
+  const isAvailable = src['isAvailable'];
+  if (isAvailable !== undefined) {
+    if (isAvailable === 'true') {
+      filter.isAvailable = true;
+    } else if (isAvailable === 'false') {
+      filter.isAvailable = false;
+    } else {
+      errors.push('isAvailable must be either true or false when provided.');
+    }
   }
-  return { type };
+
+  if (errors.length > 0) {
+    return failValidation(errors);
+  }
+  return filter;
 }
