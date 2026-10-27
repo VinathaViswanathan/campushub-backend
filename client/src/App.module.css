@@ -1,0 +1,105 @@
+.shell {
+  min-height: 100vh;
+}
+
+.topBar {
+  border-bottom: 4px solid var(--brand);
+  background: var(--bar);
+  color: var(--on-bar);
+}
+
+.topBarInner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem 1.5rem;
+  max-width: 78rem;
+  margin: 0 auto;
+  padding: 0.85rem 1.5rem;
+}
+
+.wordmark {
+  font-size: 1.2rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.userForm {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.9rem;
+}
+
+.userForm label {
+  color: var(--on-bar-soft);
+}
+
+.userForm input {
+  width: 8.5rem;
+  padding: 0.3rem 0.55rem;
+  border: 1px solid transparent;
+  border-radius: var(--radius-control);
+  background: color-mix(in srgb, var(--on-bar) 14%, transparent);
+  color: var(--on-bar);
+}
+
+.userForm input:focus-visible {
+  outline-color: var(--on-bar);
+}
+
+.userForm button {
+  padding: 0.3rem 0.8rem;
+  border: 1px solid var(--on-bar-soft);
+  border-radius: var(--radius-control);
+  background: transparent;
+  color: var(--on-bar);
+}
+
+.userForm button:disabled {
+  opacity: 0.45;
+}
+
+.userForm button:focus-visible {
+  outline-color: var(--on-bar);
+}
+
+.layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(20rem, 26rem);
+  gap: 2rem;
+  align-items: start;
+  max-width: 78rem;
+  margin: 0 auto;
+  padding: 2rem 1.5rem 3rem;
+}
+
+.sideColumn {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.placeholder {
+  padding: 1.25rem;
+  border: 1px dashed var(--line-strong);
+  border-radius: var(--radius-panel);
+}
+
+.placeholderTitle {
+  font-size: 1.05rem;
+  font-weight: 650;
+}
+
+.placeholderText {
+  margin-top: 0.35rem;
+  color: var(--ink-soft);
+}
+
+@media (max-width: 56rem) {
+  .layout {
+    grid-template-columns: 1fr;
+    padding-top: 1.25rem;
+  }
+}

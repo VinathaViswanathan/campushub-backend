@@ -1,0 +1,123 @@
+@import '@fontsource-variable/public-sans';
+
+/*
+ * CampusHub design tokens, in Northeastern University colors (red #C8102E, black, white).
+ * Components use these variables only; no hardcoded colors.
+ *   --brand    red: identity and selection (top-bar stripe, selected filter/row, primary button, date tiles)
+ *   --success  green: confirmations, so success never looks like an error
+ *   --amber    pending status
+ *   --error    errors only, always inside an ErrorBanner or next to a field
+ */
+:root {
+  color-scheme: light;
+
+  --paper: #f6f6f6;
+  --surface: #ffffff;
+  --ink: #1b1b1b;
+  --ink-soft: #5c5c5c;
+  --line: #dcdcdc;
+  --line-strong: #bdbdbd;
+
+  --brand: #c8102e;
+  --brand-hover: #a50d26;
+  --brand-tint: #fbeaed;
+  --brand-text: #c8102e;
+  --on-brand: #ffffff;
+
+  --bar: #000000;
+  --on-bar: #ffffff;
+  --on-bar-soft: #b8b8b8;
+
+  --success: #2e7d4f;
+  --success-tint: #e8f4ec;
+  --amber: #9a5b00;
+  --error: #9f1c1c;
+  --error-tint: #fdf0f0;
+  --error-line: #e9b3b3;
+
+  --radius-control: 3px;
+  --radius-panel: 6px;
+
+  --font: 'Public Sans Variable', 'Public Sans', -apple-system, 'Segoe UI', Roboto, sans-serif;
+
+  font-family: var(--font);
+  font-size: 15px;
+  line-height: 1.5;
+  color: var(--ink);
+  background: var(--paper);
+  -webkit-font-smoothing: antialiased;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+
+    --paper: #161616;
+    --surface: #1f1f1f;
+    --ink: #ececec;
+    --ink-soft: #a3a3a3;
+    --line: #333333;
+    --line-strong: #474747;
+
+    --brand: #c8102e;
+    --brand-hover: #de2a47;
+    --brand-tint: #3a1d22;
+    --brand-text: #ff6b80;
+    --on-brand: #ffffff;
+
+    --bar: #000000;
+    --on-bar: #ffffff;
+    --on-bar-soft: #a3a3a3;
+
+    --success: #6cc690;
+    --success-tint: #1b2e22;
+    --amber: #e5a74a;
+    --error: #ff9a9a;
+    --error-tint: #351b1b;
+    --error-line: #6b2f2f;
+  }
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background: var(--paper);
+}
+
+h1,
+h2,
+h3,
+p {
+  margin: 0;
+}
+
+button,
+input {
+  font: inherit;
+  color: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+button:disabled {
+  cursor: not-allowed;
+}
+
+:focus-visible {
+  outline: 2px solid var(--brand-text);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    transition: none !important;
+  }
+}

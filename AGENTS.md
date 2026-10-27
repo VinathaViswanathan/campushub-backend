@@ -80,3 +80,49 @@ Base path: `/api/v1`. Only these operations exist; do not add others:
 5. Add the controller function in `src/controllers/`.
 6. Wire the route in `src/routes/`.
 7. Run `npm run typecheck`, then retest the affected endpoints manually.
+
+## Frontend (client/)
+
+The React client lives in `client/` (Vite + React 19 + TypeScript, strict). It talks to the backend only through the contract in `docs/openapi.yaml`.
+
+```
+client/src/
+  api/types.ts          TS mirrors of the OpenAPI schemas. Never add, rename, or omit fields.
+  api/campushubApi.ts   The ONLY place that calls fetch. Turns non-2xx responses into ApiError { status, code, message }.
+  hooks/                Custom hooks owning async state (data, isLoading, error) and actions.
+  components/           Presentational + interactive components. No fetch calls.
+  utils/                Pure helpers (date conversion, error-code -> user message).
+```
+
+### Component architecture
+1. Functional components only, each with an exported `<Name>Props` interface. No class components, no `React.FC`.
+2. One component per file in `src/components/`, named after the component (`ResourceList.tsx`), with its styles in a matching CSS Module (`ResourceList.module.css`).
+3. Lift shared state to the nearest common parent (`App.tsx`) and pass it down as props; children report changes through callback props (`onSelect`, `onBooked`).
+
+### State management
+1. Use standard hooks (`useState`, `useEffect`, `useCallback`) and custom hooks in `src/hooks/`. No global state library.
+2. Never call the API inline in JSX or directly in a component body. Components call hooks; hooks call `src/api/campushubApi.ts`.
+3. Every async workflow exposes explicit `isLoading` (or `isSubmitting`) and `error` state, and both must be rendered. A loading flag must be cleared in `finally`, so a failed request can never leave a spinner hanging.
+4. Effects that fetch must pass an `AbortController` signal and abort on cleanup, and must ignore `AbortError`, so a stale response never overwrites newer state.
+5. After a mutation (create, cancel), refresh the affected list instead of patching it optimistically.
+
+### Error handling
+1. Map API error codes to user-facing messages only in `src/utils/errorMessages.ts`. `409 DOUBLE_BOOKING` must show: "This resource is already reserved for the selected time window."
+2. Render errors with `ErrorBanner` (`role="alert"`), with a retry action for failed loads.
+3. Validate form input on the client before sending (required fields, end after start, start in the future), but still handle every server error, since the server is the final authority.
+4. A 5xx response without an `ErrorResponse` body means the API was unreachable (dev proxy or gateway), so show the "cannot reach the server" message.
+
+### Styling
+1. CSS Modules for component styles; global design tokens (colors, radii) are CSS variables in `src/index.css`, with light and dark values. Do not hardcode colors in modules; use the variables.
+2. The palette uses Northeastern University colors (red `#C8102E`, black, white); do not add the university's logo, seal, or wordmark. Each color has one job:
+   - `--brand` (red): identity and selection only (top-bar stripe, selected filter and row, primary button). Use `--brand-text` when red is text, so it stays readable in dark mode.
+   - `--success` (green): confirmations and the CONFIRMED status, so success never looks like an error.
+   - `--amber`: the PENDING status.
+   - `--error`: errors only, inside `ErrorBanner` or next to a form field.
+3. Use semantic HTML and accessible names (`<label htmlFor>`, `aria-pressed` on filter toggles, `role="status"` for loading text).
+
+### Dates
+`<input type="datetime-local">` returns local time without a timezone. Convert with `localInputToIso()` (UTC ISO with `Z`) before sending, and format API times for display with `formatDateTime()`.
+
+### Running
+The backend runs on port 3000 and the client on 5173. `client/vite.config.ts` proxies `/api` to the backend, so the backend needs no CORS configuration. Run `npm run build` in `client/` (type-check + bundle) after every change.

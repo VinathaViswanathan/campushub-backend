@@ -44,6 +44,24 @@ The server connects to MongoDB before it starts listening. If MongoDB is unreach
 
 The API has no endpoint for creating resources, so `npm run seed` is how resources get into the database.
 
+## Frontend (client/)
+
+A React + TypeScript + Vite client lives in `client/`. It calls the API through a typed client (`client/src/api/campushubApi.ts`), and Vite proxies `/api` to the backend on port 3000.
+
+```bash
+# Terminal 1: backend (from the repo root)
+npm run seed
+npm run dev
+
+# Terminal 2: frontend
+cd client
+npm install
+npm run dev                   # http://localhost:5173
+npm run build                 # type-check + production bundle
+```
+
+The client has three main components: `ResourceList` (resource cards with type and availability filters), `BookingForm` (start/end time with client-side validation and API error alerts), and `UserReservations` ("My bookings" with a cancel action). The student ID in the header defaults to `user-456`, the seeded student.
+
 ## Environment variables
 
 | Variable     | Required | Default       | Purpose                            |

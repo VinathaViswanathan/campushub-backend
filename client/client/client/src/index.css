@@ -1,0 +1,117 @@
+@import '@fontsource-variable/public-sans';
+
+/*
+ * CampusHub design tokens. Components use these variables only; no hardcoded colors.
+ * Campus green carries the brand; amber marks pending; red is reserved for errors.
+ */
+:root {
+  color-scheme: light;
+
+  --paper: #f3f5f2;
+  --surface: #ffffff;
+  --ink: #1f2b26;
+  --ink-soft: #5f6b65;
+  --line: #d5dbd6;
+  --line-strong: #b7c0b9;
+
+  --green: #1f5a43;
+  --green-hover: #184937;
+  --green-tint: #e6efe9;
+  --on-green: #ffffff;
+  --on-green-soft: #c9dbd1;
+
+  --bar: #1f5a43;
+  --on-bar: #ffffff;
+  --on-bar-soft: #c9dbd1;
+
+  --amber: #a15c07;
+  --amber-tint: #fdf3e2;
+  --red: #b42318;
+  --red-tint: #fef1ef;
+  --red-line: #f1b7b0;
+
+  --radius-control: 4px;
+  --radius-panel: 8px;
+
+  --font: 'Public Sans Variable', 'Public Sans', -apple-system, 'Segoe UI', Roboto, sans-serif;
+
+  font-family: var(--font);
+  font-size: 15px;
+  line-height: 1.5;
+  color: var(--ink);
+  background: var(--paper);
+  -webkit-font-smoothing: antialiased;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+
+    --paper: #131715;
+    --surface: #1b201d;
+    --ink: #e6ebe7;
+    --ink-soft: #9aa69f;
+    --line: #2d3530;
+    --line-strong: #3f4943;
+
+    --green: #6fbf97;
+    --green-hover: #86cda9;
+    --green-tint: #1f2e26;
+    --on-green: #0f1f17;
+    --on-green-soft: #2f5a45;
+
+    --bar: #17352a;
+    --on-bar: #e6ebe7;
+    --on-bar-soft: #a9c4b6;
+
+    --amber: #e9a94b;
+    --amber-tint: #2f2414;
+    --red: #ff9c8f;
+    --red-tint: #33191a;
+    --red-line: #6b2c28;
+  }
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background: var(--paper);
+}
+
+h1,
+h2,
+h3,
+p {
+  margin: 0;
+}
+
+button,
+input {
+  font: inherit;
+  color: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+button:disabled {
+  cursor: not-allowed;
+}
+
+:focus-visible {
+  outline: 2px solid var(--green);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    transition: none !important;
+  }
+}
