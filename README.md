@@ -11,19 +11,24 @@ src/
 │   ├── index.ts            # The only file that reads process.env
 │   └── database.ts         # connectDatabase / disconnectDatabase
 ├── routes/                 # verb + path -> controller method
-├── controllers/            # req -> service call -> HTTP status + res (no ORM code)
-│   └── controller.utils.ts # domain error -> HTTP status mapping
+├── controllers/            # parse input -> one service call -> success status (no try/catch, no ORM code)
 ├── services/               # business rules + all DB access (no Express)
 ├── models/                 # Mongoose schemas + exported TS interfaces
 │   ├── Resource.model.ts
 │   └── Reservation.model.ts
 ├── validators/             # unknown input -> typed input objects
 ├── errors/                 # domain errors carrying ErrorResponse codes
-├── types/                  # DTOs matching the OpenAPI schemas
+├── types/                  # backend-internal input types; DTOs re-exported from shared/
 ├── constants/              # RESOURCE_TYPES, RESERVATION_STATUSES
-├── middleware/             # 404 NOT_FOUND, INVALID_JSON, fallback INTERNAL_ERROR
+├── middleware/
+│   └── errorHandler.ts     # the only place errors become HTTP responses (+ 404 fallback)
 └── scripts/seed.ts         # resets the DB and inserts sample data
+
+shared/
+└── api-types.d.ts          # contract types used by both src/ and client/src (types only)
 ```
+
+AI agent context: `AGENTS.md` holds the rules (imported by `CLAUDE.md`); `.cursorignore`, `.ignore`, and `.claude/settings.json` keep agents out of dependencies, builds, and logs.
 
 ## Setup
 
@@ -60,7 +65,7 @@ npm run dev                   # http://localhost:5173
 npm run build                 # type-check + production bundle
 ```
 
-The client has three main components: `ResourceList` (resource cards with type and availability filters), `BookingForm` (start/end time with client-side validation and API error alerts), and `UserReservations` ("My bookings" with a cancel action). The student ID in the header defaults to `user-456`, the seeded student.
+The client has three main components: `ResourceList` (resources grouped by type, with type and availability filters), `BookingForm` (date and time with client-side validation and API error alerts), and `UserReservations` ("My bookings" agenda with a cancel action). Components only render; state lives in hooks (`hooks/useApiQuery.ts`, `hooks/useReservations.ts`, `hooks/useBookingForm.ts`). The student ID in the header defaults to `user-456`, the seeded student.
 
 ## Environment variables
 

@@ -1,0 +1,36 @@
+.quick {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.quickButton {
+  padding: 0.25rem 0.65rem;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-control);
+  background: var(--surface);
+  font-size: 0.85rem;
+}
+
+.quickButton:hover:not(:disabled) {
+  border-color: var(--brand);
+}
+
+.quickButton[aria-pressed='true'] {
+  border-color: var(--brand);
+  background: var(--brand-tint);
+  color: var(--brand-text);
+  font-weight: 600;
+}
+
+.quickButton:disabled {
+  opacity: 0.45;
+}
+
+.duration {
+  margin-left: auto;
+  color: var(--ink-soft);
+  font-size: 0.875rem;
+  font-variant-numeric: tabular-nums;
+}

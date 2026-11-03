@@ -1,8 +1,9 @@
 import { useState } from 'react';
-import type { Reservation } from '../api/types';
-import { useUserReservations } from '../hooks/useUserReservations';
-import { dateBlockParts, formatTime, localDateKey } from '../utils/datetime';
+import { useUserReservations } from '../hooks/useReservations';
+import { groupByDay } from '../utils/agenda';
+import { dateBlockParts } from '../utils/datetime';
 import { ErrorBanner } from './ErrorBanner';
+import { ReservationItem } from './ReservationItem';
 import styles from './UserReservations.module.css';
 
 export interface UserReservationsProps {
@@ -12,41 +13,14 @@ export interface UserReservationsProps {
   refreshKey: number;
 }
 
-interface DayGroup {
-  key: string;
-  firstStart: string;
-  items: Reservation[];
-}
-
-/** Reservations arrive sorted by startTime, so consecutive items share a day. */
-function groupByDay(reservations: Reservation[]): DayGroup[] {
-  const groups: DayGroup[] = [];
-  for (const reservation of reservations) {
-    const key = localDateKey(reservation.startTime);
-    const last = groups[groups.length - 1];
-    if (last && last.key === key) {
-      last.items.push(reservation);
-    } else {
-      groups.push({ key, firstStart: reservation.startTime, items: [reservation] });
-    }
-  }
-  return groups;
-}
-
-const STATUS_LABELS: Record<Reservation['status'], string> = {
-  PENDING: 'Pending',
-  CONFIRMED: 'Confirmed',
-  CANCELLED: 'Cancelled',
-};
-
 /** "My bookings": the student's PENDING/CONFIRMED reservations as a day-by-day agenda. */
 export function UserReservations({ userId, refreshKey }: UserReservationsProps) {
   const { reservations, resourceNames, isLoading, error, reload, cancel, cancellingId, cancelError } =
     useUserReservations(userId, refreshKey);
-  // Which booking is showing the "Cancel this booking?" confirmation.
+  // Only one booking shows the "Cancel this booking?" confirmation at a time.
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
 
-  async function handleConfirmCancel(reservationId: string) {
+  async function confirmCancel(reservationId: string) {
     await cancel(reservationId);
     setConfirmingId(null);
   }
@@ -90,56 +64,19 @@ export function UserReservations({ userId, refreshKey }: UserReservationsProps) 
                   <span className={styles.month}>{parts.month}</span>
                 </div>
                 <ul className={styles.items}>
-                  {day.items.map((reservation) => {
-                    const name = resourceNames[reservation.resourceId] ?? 'Unknown resource';
-                    const isConfirming = confirmingId === reservation.id;
-                    const isCancelling = cancellingId === reservation.id;
-                    return (
-                      <li key={reservation.id} className={styles.item}>
-                        <div className={styles.itemMain}>
-                          <span className={styles.time}>
-                            {formatTime(reservation.startTime)} – {formatTime(reservation.endTime)}
-                          </span>
-                          <span className={styles.name}>{name}</span>
-                          <span className={styles.status} data-status={reservation.status}>
-                            {STATUS_LABELS[reservation.status]}
-                          </span>
-                        </div>
-
-                        {isConfirming ? (
-                          <div className={styles.confirm}>
-                            <span>Cancel this booking?</span>
-                            <button
-                              type="button"
-                              className={styles.keep}
-                              onClick={() => setConfirmingId(null)}
-                              disabled={isCancelling}
-                            >
-                              Keep it
-                            </button>
-                            <button
-                              type="button"
-                              className={styles.danger}
-                              onClick={() => void handleConfirmCancel(reservation.id)}
-                              disabled={isCancelling}
-                            >
-                              {isCancelling ? 'Cancelling…' : 'Cancel booking'}
-                            </button>
-                          </div>
-                        ) : (
-                          <button
-                            type="button"
-                            className={styles.cancel}
-                            onClick={() => setConfirmingId(reservation.id)}
-                            disabled={cancellingId !== null}
-                            aria-label={`Cancel reservation for ${name}`}
-                          >
-                            Cancel
-                          </button>
-                        )}
-                      </li>
-                    );
-                  })}
+                  {day.items.map((reservation) => (
+                    <ReservationItem
+                      key={reservation.id}
+                      reservation={reservation}
+                      resourceName={resourceNames[reservation.resourceId] ?? 'Unknown resource'}
+                      isConfirming={confirmingId === reservation.id}
+                      isCancelling={cancellingId === reservation.id}
+                      cancelDisabled={cancellingId !== null}
+                      onRequestCancel={() => setConfirmingId(reservation.id)}
+                      onKeep={() => setConfirmingId(null)}
+                      onConfirmCancel={() => void confirmCancel(reservation.id)}
+                    />
+                  ))}
                 </ul>
               </li>
             );

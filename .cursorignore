@@ -1,0 +1,35 @@
+# Files AI agents should not index or read. Keeps context on source code
+# (src/, client/src/, shared/, docs/openapi.yaml). Same patterns as .ignore.
+
+# Dependencies and lockfiles (huge, generated)
+node_modules/
+package-lock.json
+
+# Build output, coverage, generated bundles and source maps
+dist/
+build/
+coverage/
+.vite/
+*.map
+*.tsbuildinfo
+
+# Logs and agent history
+logs/
+*.log
+*.jsonl
+docs/lab*.md
+
+# Secrets
+.env
+.env.*
+
+# Binary assets and OS files
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.ico
+*.woff
+*.woff2
+*.zip
+.DS_Store

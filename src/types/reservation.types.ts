@@ -1,16 +1,7 @@
-import type { ReservationStatus } from '../constants/enums';
+/** Response shape comes from the shared contract layer. */
+export type { Reservation as ReservationDTO } from '../../shared/api-types';
 
-/** Matches components.schemas.Reservation exactly (additionalProperties: false). */
-export interface ReservationDTO {
-  id: string;
-  resourceId: string;
-  userId: string;
-  startTime: string;
-  endTime: string;
-  status: ReservationStatus;
-}
-
-/** POST /reservations body. `id` and `status` are readOnly and never accepted from clients. */
+/** Validated POST /reservations body, with times parsed to Date (backend-internal). */
 export interface CreateReservationInput {
   resourceId: string;
   userId: string;

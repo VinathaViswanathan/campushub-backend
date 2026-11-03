@@ -5,23 +5,16 @@ import {
   parseReservationIdParam,
   parseUserIdParam,
 } from '../validators/reservation.validator';
-import { sendError } from './controller.utils';
 
 /**
- * Controllers ONLY: (1) extract input from req, (2) call a service function,
- * (3) choose the HTTP status code and send the response.
- * No ORM/model imports are allowed in this folder.
+ * Controllers: parse input, call ONE service function, send the success status.
+ * No try/catch: errors propagate to middleware/errorHandler.ts.
  */
 
 /** POST /reservations -> 201 | 400 | 404 | 409 | 500 */
 export async function createReservation(req: Request, res: Response): Promise<void> {
-  try {
-    const input = parseCreateReservation(req.body);
-    const created = await reservationService.createReservation(input);
-    res.status(201).json(created);
-  } catch (err) {
-    sendError(res, err);
-  }
+  const input = parseCreateReservation(req.body);
+  res.status(201).json(await reservationService.createReservation(input));
 }
 
 /** GET /reservations/user/{userId} -> 200 | 400 | 500 */
@@ -29,39 +22,18 @@ export async function getUserReservations(
   req: Request<{ userId: string }>,
   res: Response,
 ): Promise<void> {
-  try {
-    const userId = parseUserIdParam(req.params);
-    const reservations = await reservationService.getActiveReservationsForUser(userId);
-    res.status(200).json(reservations);
-  } catch (err) {
-    sendError(res, err);
-  }
+  const userId = parseUserIdParam(req.params);
+  res.status(200).json(await reservationService.getActiveReservationsForUser(userId));
 }
 
 /** PATCH /reservations/{id}/cancel -> 200 | 400 | 404 | 500 */
-export async function cancelReservation(
-  req: Request<{ id: string }>,
-  res: Response,
-): Promise<void> {
-  try {
-    const id = parseReservationIdParam(req.params);
-    const cancelled = await reservationService.cancelReservation(id);
-    res.status(200).json(cancelled);
-  } catch (err) {
-    sendError(res, err);
-  }
+export async function cancelReservation(req: Request<{ id: string }>, res: Response): Promise<void> {
+  const id = parseReservationIdParam(req.params);
+  res.status(200).json(await reservationService.cancelReservation(id));
 }
 
 /** PATCH /reservations/{id}/confirm -> 200 | 400 | 404 | 409 | 500 */
-export async function confirmReservation(
-  req: Request<{ id: string }>,
-  res: Response,
-): Promise<void> {
-  try {
-    const id = parseReservationIdParam(req.params);
-    const confirmed = await reservationService.confirmReservation(id);
-    res.status(200).json(confirmed);
-  } catch (err) {
-    sendError(res, err);
-  }
+export async function confirmReservation(req: Request<{ id: string }>, res: Response): Promise<void> {
+  const id = parseReservationIdParam(req.params);
+  res.status(200).json(await reservationService.confirmReservation(id));
 }

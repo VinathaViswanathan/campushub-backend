@@ -1,6 +1,6 @@
 import type {
   ApiErrorCode,
-  CreateReservationDTO,
+  CreateReservationRequest,
   ErrorResponse,
   Reservation,
   Resource,
@@ -101,7 +101,7 @@ export function fetchResources(
 
 /** POST /reservations. 201 returns the new PENDING reservation; 400/404/409 throw ApiError. */
 export function createReservation(
-  payload: CreateReservationDTO,
+  payload: CreateReservationRequest,
   options: RequestOptions = {},
 ): Promise<Reservation> {
   return request<Reservation>('/reservations', {

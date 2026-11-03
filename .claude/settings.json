@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "deny": [
+      "Read(./node_modules/**)",
+      "Read(./client/node_modules/**)",
+      "Read(./**/package-lock.json)",
+      "Read(./dist/**)",
+      "Read(./client/dist/**)",
+      "Read(./coverage/**)",
+      "Read(./logs/**)",
+      "Read(./**/*.map)",
+      "Read(./.env)"
+    ]
+  }
+}

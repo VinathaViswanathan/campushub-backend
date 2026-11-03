@@ -1,16 +1,12 @@
-/**
- * Domain errors thrown by the validator and service layers.
- * Each carries a machine-readable code from the OpenAPI ErrorResponse enum,
- * but NO HTTP status; controllers decide the status code.
- */
+import type { ApiErrorCode } from '../../shared/api-types';
 
-export type DomainErrorCode =
-  | 'VALIDATION_ERROR'
-  | 'RESOURCE_NOT_FOUND'
-  | 'RESOURCE_UNAVAILABLE'
-  | 'DOUBLE_BOOKING'
-  | 'RESERVATION_NOT_FOUND'
-  | 'INVALID_STATUS_TRANSITION';
+/**
+ * Domain errors thrown by the validator and service layers. Each carries a code from
+ * the shared ApiErrorCode union but no HTTP status; middleware/errorHandler.ts maps
+ * codes to statuses. Transport-level codes are excluded because only middleware
+ * produces them.
+ */
+export type DomainErrorCode = Exclude<ApiErrorCode, 'INVALID_JSON' | 'NOT_FOUND' | 'INTERNAL_ERROR'>;
 
 export abstract class DomainError extends Error {
   abstract readonly code: DomainErrorCode;

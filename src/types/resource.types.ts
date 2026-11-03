@@ -1,17 +1,9 @@
-import type { ResourceType } from '../constants/enums';
-
-/** Matches components.schemas.Resource exactly (additionalProperties: false). */
-export interface ResourceDTO {
-  id: string;
-  name: string;
-  type: ResourceType;
-  location: string;
-  isAvailable: boolean;
-}
+/** Response shape comes from the shared contract layer. */
+export type { Resource as ResourceDTO } from '../../shared/api-types';
 
 /**
- * GET /resources query parameters. `type` may be an arbitrary non-empty string per the spec.
- * `isAvailable` is already parsed from the "true"/"false" query string into a boolean.
+ * GET /resources query parameters (backend-internal). `type` may be any non-empty
+ * string per the spec; `isAvailable` is already parsed from "true"/"false".
  */
 export interface ResourceFilter {
   type?: string;
