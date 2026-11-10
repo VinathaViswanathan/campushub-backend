@@ -10,6 +10,7 @@ import {
 import { Reservation, type ReservationDocument } from '../models/Reservation.model';
 import { Resource } from '../models/Resource.model';
 import type { CreateReservationInput, ReservationDTO } from '../types/reservation.types';
+import { withResourceLock } from './resource.lock';
 import { isObjectIdString, translatePersistenceError } from './service.utils';
 
 /**
@@ -35,7 +36,8 @@ function toReservationDTO(doc: ReservationDocument): ReservationDTO {
  *     (a resourceId that is not a valid ObjectId cannot exist, so it is also "not found")
  *  3. the resource must be available                          -> RESOURCE_UNAVAILABLE
  *  4. no overlapping PENDING/CONFIRMED booking on resource    -> DOUBLE_BOOKING
- * New reservations always start as PENDING.
+ * New reservations always start as PENDING. The overlap check and the insert run under
+ * a per-resource lock so simultaneous requests cannot both book the same slot.
  */
 export async function createReservation(input: CreateReservationInput): Promise<ReservationDTO> {
   if (input.endTime.getTime() <= input.startTime.getTime()) {
@@ -57,28 +59,30 @@ export async function createReservation(input: CreateReservationInput): Promise<
 
   // Two windows overlap when each one starts before the other ends
   // (back-to-back bookings, where one ends exactly as the next starts, are allowed).
-  const overlapping = await Reservation.exists({
-    resourceId: resource._id,
-    status: { $in: [...ACTIVE_RESERVATION_STATUSES] },
-    startTime: { $lt: input.endTime },
-    endTime: { $gt: input.startTime },
-  });
-  if (overlapping) {
-    throw new DoubleBookingError('Resource is already reserved for this time slot.');
-  }
-
-  try {
-    const doc = await Reservation.create({
+  return withResourceLock(resource.id, async () => {
+    const overlapping = await Reservation.exists({
       resourceId: resource._id,
-      userId: input.userId,
-      startTime: input.startTime,
-      endTime: input.endTime,
-      status: 'PENDING',
+      status: { $in: [...ACTIVE_RESERVATION_STATUSES] },
+      startTime: { $lt: input.endTime },
+      endTime: { $gt: input.startTime },
     });
-    return toReservationDTO(doc);
-  } catch (err) {
-    return translatePersistenceError(err);
-  }
+    if (overlapping) {
+      throw new DoubleBookingError('Resource is already reserved for this time slot.');
+    }
+
+    try {
+      const doc = await Reservation.create({
+        resourceId: resource._id,
+        userId: input.userId,
+        startTime: input.startTime,
+        endTime: input.endTime,
+        status: 'PENDING',
+      });
+      return toReservationDTO(doc);
+    } catch (err) {
+      return translatePersistenceError(err);
+    }
+  });
 }
 
 /** A user's active (PENDING or CONFIRMED) reservations, sorted by startTime. */

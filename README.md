@@ -92,7 +92,20 @@ Error body: `{ "code": "DOUBLE_BOOKING", "message": "Resource is already reserve
 
 ## Testing
 
-Automated contract check (Lab 3 scenarios plus Lab 4 filter, cancel, and confirm scenarios from `docs/openapi.yaml`):
+Unit and integration tests (Jest + Supertest) run against an in-memory MongoDB, so no database or running server is needed. The first run downloads a MongoDB binary (~70 MB).
+
+```bash
+npm test                 # all tests
+npm run test:coverage    # tests + coverage report; fails below 80% for services/controllers
+```
+
+| Location | What it tests |
+|---|---|
+| `src/services/__tests__/` | Business rules: overlap boundaries (±1 ms), validation, fuzzing, concurrent bookings, status changes |
+| `src/routes/__tests__/` | HTTP status codes and bodies end to end, payload fuzzing, `GET /resources` filters |
+| `src/test/setup.ts` | Starts and resets the in-memory MongoDB for each test file |
+
+Live contract check against a running server (Lab 3 scenarios plus Lab 4 filter, cancel, and confirm scenarios from `docs/openapi.yaml`):
 
 ```bash
 npm run seed          # reset data first; the tests create reservations
