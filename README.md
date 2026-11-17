@@ -94,7 +94,7 @@ Error body: `{ "code": "DOUBLE_BOOKING", "message": "Resource is already reserve
 
 ## Continuous integration
 
-`.github/workflows/ci.yml` runs `npm ci`, `npm run lint`, and `npm test` on every push and pull request to `main`. When Jest fails on a pull request, an `auto-fix` job asks an AI model (GitHub Models by default) for a patch, verifies it against the full test suite, and opens a `fix/auto-heal-<run id>` pull request for human review. Details and safeguards: `docs/lab8-ci-auto-heal.md`.
+`.github/workflows/ci.yml` runs `npm ci`, `npm run lint`, and `npm test` on every push and pull request to `main`. When Jest fails on a pull request, an `auto-fix` job asks an AI model (Anthropic, or any OpenAI-compatible API) for a patch, verifies it against the full test suite, and opens a `fix/auto-heal-<run id>` pull request for human review. Details and safeguards: `docs/lab8-ci-auto-heal.md`.
 
 ## Testing
 

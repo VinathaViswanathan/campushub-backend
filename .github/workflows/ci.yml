@@ -72,7 +72,6 @@ jobs:
     permissions:
       contents: write        # push the fix branch
       pull-requests: write   # open the fix PR
-      models: read           # call GitHub Models with GITHUB_TOKEN
     env:
       # Branch names go through env vars, never inline in shell, to prevent script injection.
       TARGET_BRANCH: ${{ github.head_ref }}
@@ -119,8 +118,12 @@ jobs:
         id: heal
         if: steps.guard.outputs.skip != 'true'
         env:
-          GITHUB_TOKEN: ${{ github.token }}
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}   # optional; GitHub Models is used when unset
+          # AI provider: an ANTHROPIC_API_KEY secret, or an AI_API_KEY secret for any OpenAI-compatible
+          # API plus AI_MODEL / AI_BASE_URL repository variables. (GitHub Models was retired 2026-07-30.)
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          AI_API_KEY: ${{ secrets.AI_API_KEY }}
+          AI_MODEL: ${{ vars.AI_MODEL }}
+          AI_BASE_URL: ${{ vars.AI_BASE_URL }}
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
         run: npx tsx scripts/auto-heal.ts test-results.log
 
