@@ -8,11 +8,13 @@
  *
  * Usage:  npx tsx scripts/auto-heal.ts test-results.log
  *
- * Environment:
- *   GITHUB_TOKEN       GitHub Models (default provider; needs `permissions: models: read`)
- *   ANTHROPIC_API_KEY  optional; uses Anthropic instead when set
- *   AI_MODEL           optional model override
- *   AI_BASE_URL        optional endpoint override (used for local dry runs)
+ * AI provider (empty values count as unset):
+ *   ANTHROPIC_API_KEY  Anthropic Messages API (model defaults to claude-sonnet-5-5), or
+ *   AI_API_KEY         any OpenAI-compatible Chat Completions API (OpenAI, Groq, Gemini, OpenRouter, ...);
+ *                      requires AI_MODEL; AI_BASE_URL defaults to OpenAI
+ *   AI_MODEL           model name (optional for Anthropic)
+ *   AI_BASE_URL        full chat endpoint URL override (also used for local dry runs)
+ * Other:
  *   BASE_SHA           commit to diff against (the PR base); empty = no diff context
  *   MAX_ATTEMPTS       default 2
  *
@@ -38,8 +40,40 @@ interface TestRun {
 
 const LIMITS = { log: 6_000, diff: 4_000, fileChars: 12_000, totalFileChars: 14_000, files: 3 };
 const MAX_ATTEMPTS = Number(process.env.MAX_ATTEMPTS ?? 2);
-const useAnthropic = Boolean(process.env.ANTHROPIC_API_KEY);
-const MODEL = process.env.AI_MODEL ?? (useAnthropic ? 'claude-sonnet-5-5' : 'openai/gpt-4.1');
+
+export interface Provider {
+  name: 'Anthropic' | 'OpenAI-compatible';
+  url: string;
+  model: string;
+  headers: Record<string, string>;
+}
+
+/**
+ * Picks the AI provider from the environment. GitHub passes unset secrets and variables as empty
+ * strings, so `||` (not `??`) is used throughout. Note: GitHub Models was retired on 2026-07-30.
+ */
+export function resolveProvider(env: Record<string, string | undefined>): Provider {
+  if (env.ANTHROPIC_API_KEY) {
+    return {
+      name: 'Anthropic',
+      url: env.AI_BASE_URL || 'https://api.anthropic.com/v1/messages',
+      model: env.AI_MODEL || 'claude-sonnet-5-5',
+      headers: { 'x-api-key': env.ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
+    };
+  }
+  if (env.AI_API_KEY) {
+    if (!env.AI_MODEL) throw new Error('AI_API_KEY is set but AI_MODEL is not. Set the AI_MODEL repository variable.');
+    return {
+      name: 'OpenAI-compatible',
+      url: env.AI_BASE_URL || 'https://api.openai.com/v1/chat/completions',
+      model: env.AI_MODEL,
+      headers: { Authorization: `Bearer ${env.AI_API_KEY}`, Accept: 'application/json', 'Content-Type': 'application/json' },
+    };
+  }
+  throw new Error(
+    'No AI provider configured. Add an ANTHROPIC_API_KEY repository secret, or an AI_API_KEY secret plus AI_MODEL (and AI_BASE_URL) variables.',
+  );
+}
 
 const SYSTEM_PROMPT = `You are an automated repair agent in a CI pipeline for a TypeScript Express + Mongoose API.
 Parse the attached Jest failure log. Locate the source code causing the failure in src/ and generate a patch that fixes the bug without breaking existing tests.
@@ -138,26 +172,22 @@ function testSummaryLine(output: string): string {
 
 // ---------------------------------------------------------------- model call
 
-async function callModel(userPrompt: string): Promise<string> {
-  const body = useAnthropic
-    ? { model: MODEL, max_tokens: 8_000, temperature: 0, system: SYSTEM_PROMPT, messages: [{ role: 'user', content: userPrompt }] }
-    : { model: MODEL, temperature: 0, messages: [{ role: 'system', content: SYSTEM_PROMPT }, { role: 'user', content: userPrompt }] };
-  const url =
-    process.env.AI_BASE_URL ??
-    (useAnthropic ? 'https://api.anthropic.com/v1/messages' : 'https://models.github.ai/inference/chat/completions');
-  const headers: Record<string, string> = useAnthropic
-    ? { 'x-api-key': process.env.ANTHROPIC_API_KEY ?? '', 'anthropic-version': '2023-06-01', 'content-type': 'application/json' }
-    : {
-        // Exactly the headers GitHub documents for the Models inference API. GitHub's REST-style
-        // headers (Accept: application/vnd.github+json, X-GitHub-Api-Version) made the endpoint
-        // answer a bare "OK" instead of running the model.
-        Authorization: `Bearer ${process.env.GITHUB_TOKEN ?? ''}`,
-        Accept: 'application/json',
-        'Content-Type': 'application/json',
-      };
+async function callModel(provider: Provider, userPrompt: string): Promise<string> {
+  const anthropic = provider.name === 'Anthropic';
+  const body = anthropic
+    ? { model: provider.model, max_tokens: 8_000, system: SYSTEM_PROMPT, messages: [{ role: 'user', content: userPrompt }] }
+    : { model: provider.model, temperature: 0, messages: [{ role: 'system', content: SYSTEM_PROMPT }, { role: 'user', content: userPrompt }] };
+  const { url, headers } = provider;
 
   for (let attempt = 1; attempt <= 2; attempt += 1) {
-    const response = await fetch(url, { method: 'POST', headers, body: JSON.stringify(body) });
+    let response: Response;
+    try {
+      response = await fetch(url, { method: 'POST', headers, body: JSON.stringify(body) });
+    } catch (err) {
+      throw new Error(`Could not reach the model endpoint ${url}: ${err instanceof Error ? err.message : String(err)}`, {
+        cause: err,
+      });
+    }
     if (response.ok) {
       const raw = await response.text();
       let data: { choices?: { message?: { content?: string } }[]; content?: { type: string; text?: string }[] };
@@ -169,7 +199,7 @@ async function callModel(userPrompt: string): Promise<string> {
           `Model endpoint ${url} returned HTTP ${response.status} (${contentType}) that is not JSON: ${JSON.stringify(truncate(raw, 200))}`,
         );
       }
-      const text = useAnthropic
+      const text = anthropic
         ? (data.content ?? []).filter((part) => part.type === 'text').map((part) => part.text ?? '').join('')
         : (data.choices?.[0]?.message?.content ?? '');
       if (text) return text;
@@ -230,14 +260,15 @@ async function main(): Promise<void> {
 
   const failures = extractFailures(log);
   const diff = branchDiff(baseSha);
+  const provider = resolveProvider(process.env);
   const originals = new Map(candidates.map((file) => [file, readFileSync(file, 'utf8')]));
   const restore = (): void => originals.forEach((content, file) => writeFileSync(file, content));
-  console.log(`Model: ${MODEL} via ${useAnthropic ? 'Anthropic' : 'GitHub Models'}; candidate files: ${candidates.join(', ')}`);
+  console.log(`Model: ${provider.model} via ${provider.name} (${provider.url}); candidate files: ${candidates.join(', ')}`);
 
   let previous: { explanation: string; failures: string } | undefined;
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt += 1) {
     restore();
-    const reply = parseReply(await callModel(buildPrompt(failures, diff, candidates, previous)));
+    const reply = parseReply(await callModel(provider, buildPrompt(failures, diff, candidates, previous)));
     const rejected = reply.files.filter((file) => !originals.has(file.path));
     if (rejected.length > 0) {
       summary(`Attempt ${attempt}: rejected edits outside the allowed files: ${rejected.map((f) => f.path).join(', ')}`);
@@ -250,7 +281,7 @@ async function main(): Promise<void> {
     if (result.passed) {
       const changed = accepted.map((file) => file.path);
       writeFileSync('auto-heal-files.txt', `${changed.join('\n')}\n`);
-      writeFileSync('auto-heal-pr.md', prBody(reply.explanation, changed, failingTestNames(log), testSummaryLine(result.output), attempt));
+      writeFileSync('auto-heal-pr.md', prBody(provider, reply.explanation, changed, failingTestNames(log), testSummaryLine(result.output), attempt));
       setOutput('fixed', 'true');
       summary(`### Auto-heal succeeded on attempt ${attempt}\n${reply.explanation}\n\n${testSummaryLine(result.output)}`);
       return;
@@ -264,7 +295,7 @@ async function main(): Promise<void> {
   process.exitCode = 1;
 }
 
-function prBody(explanation: string, files: string[], failing: string[], testLine: string, attempts: number): string {
+function prBody(provider: Provider, explanation: string, files: string[], failing: string[], testLine: string, attempts: number): string {
   const runUrl = `${process.env.GITHUB_SERVER_URL ?? 'https://github.com'}/${process.env.GITHUB_REPOSITORY ?? ''}/actions/runs/${process.env.GITHUB_RUN_ID ?? ''}`;
   const diff = sh('git', ['diff', '--', ...files]);
   const failingList = failing.slice(0, 15).map((name) => `- ${name}`).join('\n') || '- (see CI log)';
@@ -291,7 +322,7 @@ ${truncate(diff, 20_000)}
 ### Automated checks
 - Guardrail: only non-test files under \`src/\` could be changed; no test files or assertions were modified.
 - Full Jest suite after the patch: **${testLine}**
-- Model: \`${MODEL}\` (${useAnthropic ? 'Anthropic' : 'GitHub Models'}), attempts: ${attempts}
+- Model: \`${provider.model}\` (${provider.name}), attempts: ${attempts}
 
 ## Human-in-the-loop review
 _To be completed by the reviewer before merging._

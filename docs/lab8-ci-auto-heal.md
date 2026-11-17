@@ -34,13 +34,23 @@ push / PR to main
 | Only PRs from this repository; branch names passed via env vars | Forks cannot use the write token; no shell injection through branch names |
 | The fix goes to a separate PR into the failing branch, never straight to `main` | A human reviews and merges |
 
-AI provider: GitHub Models (`openai/gpt-4.1`) using the workflow's own `GITHUB_TOKEN`
-(`permissions: models: read`), so no API key is needed. Setting a repository secret
-`ANTHROPIC_API_KEY` switches the script to Anthropic.
+AI provider, configured with repository secrets and variables (empty values count as unset):
+
+| Option | Secret | Variables |
+|---|---|---|
+| Anthropic (checked first) | `ANTHROPIC_API_KEY` | optional `AI_MODEL` (default `claude-sonnet-5-5`) |
+| Any OpenAI-compatible Chat Completions API (OpenAI, Groq, Google Gemini, OpenRouter, ...) | `AI_API_KEY` | `AI_MODEL` (required), `AI_BASE_URL` (full chat endpoint; defaults to OpenAI) |
+
+The first version used GitHub Models through the workflow's `GITHUB_TOKEN`. GitHub retired GitHub
+Models on 2026-07-30; its endpoint now answers a bare `HTTP 200 "OK"`. The first real CI runs failed
+that way, which is why the provider is now configurable and the script reports non-JSON replies,
+network errors, and missing configuration explicitly.
 
 ## One-time repository setup
 
-GitHub → repository **Settings → Actions → General → Workflow permissions**:
+1. GitHub → repository **Settings → Secrets and variables → Actions**: add the AI provider secret
+   (and variables, if using an OpenAI-compatible provider) from the table above.
+2. GitHub → repository **Settings → Actions → General → Workflow permissions**:
 - Select **Read and write permissions**.
 - Tick **Allow GitHub Actions to create and approve pull requests**. Without this, `gh pr create`
   fails with "GitHub Actions is not permitted to create or approve pull requests".
