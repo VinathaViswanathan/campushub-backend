@@ -148,19 +148,27 @@ async function callModel(userPrompt: string): Promise<string> {
   const headers: Record<string, string> = useAnthropic
     ? { 'x-api-key': process.env.ANTHROPIC_API_KEY ?? '', 'anthropic-version': '2023-06-01', 'content-type': 'application/json' }
     : {
+        // Exactly the headers GitHub documents for the Models inference API. GitHub's REST-style
+        // headers (Accept: application/vnd.github+json, X-GitHub-Api-Version) made the endpoint
+        // answer a bare "OK" instead of running the model.
         Authorization: `Bearer ${process.env.GITHUB_TOKEN ?? ''}`,
-        Accept: 'application/vnd.github+json',
-        'X-GitHub-Api-Version': '2022-11-28',
+        Accept: 'application/json',
         'Content-Type': 'application/json',
       };
 
   for (let attempt = 1; attempt <= 2; attempt += 1) {
     const response = await fetch(url, { method: 'POST', headers, body: JSON.stringify(body) });
     if (response.ok) {
-      const data = (await response.json()) as {
-        choices?: { message?: { content?: string } }[];
-        content?: { type: string; text?: string }[];
-      };
+      const raw = await response.text();
+      let data: { choices?: { message?: { content?: string } }[]; content?: { type: string; text?: string }[] };
+      try {
+        data = JSON.parse(raw) as typeof data;
+      } catch {
+        const contentType = response.headers.get('content-type') ?? 'unknown';
+        throw new Error(
+          `Model endpoint ${url} returned HTTP ${response.status} (${contentType}) that is not JSON: ${JSON.stringify(truncate(raw, 200))}`,
+        );
+      }
       const text = useAnthropic
         ? (data.content ?? []).filter((part) => part.type === 'text').map((part) => part.text ?? '').join('')
         : (data.choices?.[0]?.message?.content ?? '');
