@@ -63,8 +63,8 @@ export async function createReservation(input: CreateReservationInput): Promise<
     const overlapping = await Reservation.exists({
       resourceId: resource._id,
       status: { $in: [...ACTIVE_RESERVATION_STATUSES] },
-      startTime: { $lt: input.endTime },
-      endTime: { $gt: input.startTime },
+      startTime: { $lte: input.endTime },
+      endTime: { $gte: input.startTime },
     });
     if (overlapping) {
       throw new DoubleBookingError('Resource is already reserved for this time slot.');
