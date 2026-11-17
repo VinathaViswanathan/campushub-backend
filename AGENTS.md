@@ -61,10 +61,17 @@ Domain rules (enforced in `services/`):
 - Fuzz tests use `seededRandom` from `src/test/factories.ts` so failures are reproducible.
 - Coverage gate (`jest.config.ts`): 80% statements and branches for `src/services/` and `src/controllers/`.
 
+## CI and auto-heal (`.github/workflows/ci.yml`)
+
+- Every push/PR to `main` runs `npm ci`, `npm run lint`, and `npm test`. Keep all three green.
+- If Jest fails on a PR, the `auto-fix` job runs `scripts/auto-heal.ts`: it may edit only non-test `.ts` files under `src/`, must pass the full suite, and opens a `fix/auto-heal-<run id>` PR into the failing branch. A human reviews before merging.
+- Never weaken or delete a test to make CI pass. Fix the code.
+
 ## Verify before finishing
 
 ```bash
 npm run typecheck                         # backend
+npm run lint                              # ESLint (eslint.config.mjs)
 npm run test:coverage                     # all tests + coverage gate
 (cd client && npm run build)              # client type-check + bundle
 npm run seed && npm run dev               # then, in another terminal:

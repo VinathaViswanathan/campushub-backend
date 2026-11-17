@@ -1,0 +1,140 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+# A new push to the same PR cancels the older run.
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Lint and test
+    # mongodb-memory-server downloads MongoDB 7.0.14 (src/test/setup.ts), which has Ubuntu 22.04 builds.
+    runs-on: ubuntu-22.04
+    outputs:
+      tests_failed: ${{ steps.jest.outcome == 'failure' }}
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Cache MongoDB binary
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/mongodb-binaries
+          key: mongodb-binaries-${{ runner.os }}-7.0.14
+
+      - name: Run Jest
+        id: jest
+        run: |
+          set -o pipefail
+          npm test -- --ci 2>&1 | tee test-results.log
+
+      - name: Upload test log
+        if: always() && steps.jest.outcome != 'skipped'
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: test-results.log
+          retention-days: 7
+
+  auto-fix:
+    name: Auto-heal failing tests
+    needs: test
+    # Runs only when the Jest step failed (not lint), for pull requests from this repository,
+    # and never for an auto-heal branch, so the agent cannot loop on its own fixes.
+    if: >-
+      failure() &&
+      needs.test.outputs.tests_failed == 'true' &&
+      github.event_name == 'pull_request' &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      !startsWith(github.head_ref, 'fix/auto-heal-')
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write        # push the fix branch
+      pull-requests: write   # open the fix PR
+      models: read           # call GitHub Models with GITHUB_TOKEN
+    env:
+      # Branch names go through env vars, never inline in shell, to prevent script injection.
+      TARGET_BRANCH: ${{ github.head_ref }}
+      FIX_BRANCH: fix/auto-heal-${{ github.run_id }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Check out the failing branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref }}
+          fetch-depth: 0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Cache MongoDB binary
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/mongodb-binaries
+          key: mongodb-binaries-${{ runner.os }}-7.0.14
+
+      - name: Download the Jest failure log
+        uses: actions/download-artifact@v4
+        with:
+          name: test-results
+
+      - name: Skip if an auto-heal PR is already open for this branch
+        id: guard
+        run: |
+          open=$(gh pr list --base "$TARGET_BRANCH" --state open --json headRefName \
+            --jq '[.[] | select(.headRefName | startswith("fix/auto-heal-"))] | length')
+          if [ "$open" -gt 0 ]; then
+            echo "An auto-heal PR is already open for $TARGET_BRANCH; skipping." >> "$GITHUB_STEP_SUMMARY"
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Diagnose and patch with the AI agent
+        id: heal
+        if: steps.guard.outputs.skip != 'true'
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}   # optional; GitHub Models is used when unset
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: npx tsx scripts/auto-heal.ts test-results.log
+
+      - name: Commit the fix and open a pull request
+        if: steps.heal.outputs.fixed == 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -b "$FIX_BRANCH"
+          xargs -a auto-heal-files.txt git add --
+          git commit -m "fix: auto-heal failing tests (CI run ${{ github.run_id }})"
+          git push origin "$FIX_BRANCH"
+          gh pr create \
+            --base "$TARGET_BRANCH" \
+            --head "$FIX_BRANCH" \
+            --title "fix: auto-heal failing tests on $TARGET_BRANCH" \
+            --body-file auto-heal-pr.md

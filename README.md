@@ -1,5 +1,7 @@
 # campushub-backend
 
+[![CI](https://github.com/VinathaViswanathan/campushub-backend/actions/workflows/ci.yml/badge.svg)](https://github.com/VinathaViswanathan/campushub-backend/actions/workflows/ci.yml)
+
 CS5500 backend service for CampusHub, a campus resource management system. Built with TypeScript, Express 5, and Mongoose under strict AI-agent context boundaries (see `AGENTS.md`). The API contract is `docs/openapi.yaml`.
 
 ## Architecture
@@ -89,6 +91,10 @@ The client has three main components: `ResourceList` (resources grouped by type,
 `GET /resources` accepts `type` and `isAvailable` (`true`/`false`) query filters, combined with AND.
 
 Error body: `{ "code": "DOUBLE_BOOKING", "message": "Resource is already reserved for this time slot." }`
+
+## Continuous integration
+
+`.github/workflows/ci.yml` runs `npm ci`, `npm run lint`, and `npm test` on every push and pull request to `main`. When Jest fails on a pull request, an `auto-fix` job asks an AI model (GitHub Models by default) for a patch, verifies it against the full test suite, and opens a `fix/auto-heal-<run id>` pull request for human review. Details and safeguards: `docs/lab8-ci-auto-heal.md`.
 
 ## Testing
 
